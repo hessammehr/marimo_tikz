@@ -1,0 +1,16 @@
+[project]
+name = "marimo-tikz"
+version = "0.1.0"
+description = "Render TikZ pictures as SVG images in marimo notebooks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Hessam Mehr", email = "Hessam.Mehr@kcl.ac.uk" }]
+dependencies = ["marimo"]
+
+[project.urls]
+Homepage = "https://github.com/hessammehr/marimo_tikz"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
