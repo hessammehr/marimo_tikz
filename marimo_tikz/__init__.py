@@ -16,11 +16,29 @@ import tempfile
 import marimo as mo
 
 __all__ = ["TikzError", "tikz", "tikz_svg"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
+
+_MISSING = {
+    "dvilualatex": "texlive-latex-base texlive-latex-extra texlive-luatex texlive-pictures",
+    "dvisvgm": "dvisvgm",
+}
 
 
 class TikzError(RuntimeError):
     """LaTeX or dvisvgm failed - the message holds the relevant log lines."""
+
+
+def _run(cmd: list[str], cwd: pathlib.Path, timeout: int) -> subprocess.CompletedProcess:
+    """Run a toolchain command, reporting a missing binary as a TikzError."""
+    try:
+        return subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
+        )
+    except FileNotFoundError as exc:
+        raise TikzError(
+            f"{cmd[0]} not found on PATH; install it "
+            f"(Debian/Ubuntu: apt install {_MISSING[cmd[0]]})"
+        ) from exc
 
 
 @functools.lru_cache(maxsize=256)
@@ -47,7 +65,7 @@ def tikz_svg(
         timeout: per-subprocess timeout in seconds.
 
     Raises:
-        TikzError: if LaTeX or dvisvgm fails.
+        TikzError: if a tool is missing from PATH, or LaTeX or dvisvgm fails.
     """
     libs = f"\\usetikzlibrary{{{','.join(libraries)}}}\n" if libraries else ""
     doc = (
@@ -58,19 +76,19 @@ def tikz_svg(
     with tempfile.TemporaryDirectory() as tmp:
         d = pathlib.Path(tmp)
         (d / "doc.tex").write_text(doc)
-        tex = subprocess.run(
+        tex = _run(
             ["dvilualatex", "-interaction=nonstopmode", "-halt-on-error",
              "-no-shell-escape", "doc.tex"],
-            cwd=d, capture_output=True, text=True, timeout=timeout,
+            d, timeout,
         )
         if tex.returncode != 0 or not (d / "doc.dvi").exists():
             log = (d / "doc.log").read_text(errors="replace")
             hits = "\n".join(ln for ln in log.splitlines() if ln.startswith("!"))
             raise TikzError(hits or log[-1200:])
-        conv = subprocess.run(
+        conv = _run(
             ["dvisvgm", "--no-fonts", "--exact-bbox", "--optimize",
              "-o", "doc.svg", "doc.dvi"],
-            cwd=d, capture_output=True, text=True, timeout=timeout,
+            d, timeout,
         )
         if not (d / "doc.svg").exists():
             raise TikzError(conv.stderr[-1200:])

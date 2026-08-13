@@ -35,3 +35,12 @@ tikz(
 ```
 
 `tikz_svg(...)` returns the raw SVG string instead. Both are LRU-cached.
+
+## Example notebook
+
+```sh
+uvx marimo edit --sandbox examples/notebook.py
+```
+
+A microscope light path, the same picture driven by sliders, and `tikz-cd` / `pgfplots`
+via `preamble`.
