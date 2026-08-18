@@ -34,7 +34,9 @@ tikz(
 )
 ```
 
-`tikz_svg(...)` returns the raw SVG string instead. Both are LRU-cached.
+`tikz(...)` also shows Download SVG / PDF / TikZ / preamble buttons; pass
+`downloads=False` to hide them. `tikz_svg(...)` returns the raw SVG string instead.
+Both are LRU-cached.
 
 ## Example notebook
 

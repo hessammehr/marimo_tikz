@@ -16,7 +16,7 @@ import tempfile
 import marimo as mo
 
 __all__ = ["TikzError", "tikz", "tikz_svg"]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 _MISSING = {
     "lualatex": "texlive-latex-base texlive-latex-extra texlive-luatex texlive-pictures",
@@ -42,27 +42,14 @@ def _run(cmd: list[str], cwd: pathlib.Path, timeout: int) -> subprocess.Complete
 
 
 @functools.lru_cache(maxsize=256)
-def tikz_svg(
+def _compile(
     code: str,
     libraries: tuple[str, ...] = (),
     preamble: str = "",
     border: str = "4pt",
     timeout: int = 60,
-) -> str:
-    r"""Compile a TikZ picture to an SVG string (LuaTeX -> PDF -> dvisvgm).
-
-    Results are cached, so re-rendering an unchanged picture is free.
-
-    Args:
-        code: the picture, e.g. ``r"\begin{tikzpicture}...\end{tikzpicture}"``.
-        libraries: TikZ libraries to load, e.g. ``("arrows.meta", "calc")``.
-        preamble: extra preamble lines, e.g. ``r"\usepackage{tikz-cd}"``.
-        border: whitespace added around the tight bounding box.
-        timeout: per-subprocess timeout in seconds.
-
-    Raises:
-        TikzError: if a tool is missing from PATH, or LaTeX or dvisvgm fails.
-    """
+) -> tuple[str, bytes]:
+    """Compile a picture, returning ``(svg, pdf_bytes)``. Cached."""
     libs = f"\\usetikzlibrary{{{','.join(libraries)}}}\n" if libraries else ""
     doc = (
         f"\\documentclass[border={border}]{{standalone}}\n"
@@ -89,6 +76,7 @@ def tikz_svg(
         if not (d / "doc.svg").exists():
             raise TikzError(conv.stderr[-1200:])
         svg = (d / "doc.svg").read_text()
+        pdf = (d / "doc.pdf").read_bytes()
 
     # dvisvgm reuses ids like "g0-72" across documents; namespace them so that several
     # diagrams can share a page when the SVG is embedded inline rather than as an <img>.
@@ -97,7 +85,31 @@ def tikz_svg(
         svg = (svg.replace(f"id='{name}'", f"id='{tag}-{name}'")
                   .replace(f"href='#{name}'", f"href='#{tag}-{name}'")
                   .replace(f"url(#{name})", f"url(#{tag}-{name})"))
-    return svg
+    return svg, pdf
+
+
+def tikz_svg(
+    code: str,
+    libraries: tuple[str, ...] = (),
+    preamble: str = "",
+    border: str = "4pt",
+    timeout: int = 60,
+) -> str:
+    r"""Compile a TikZ picture to an SVG string (LuaTeX -> PDF -> dvisvgm).
+
+    Results are cached, so re-rendering an unchanged picture is free.
+
+    Args:
+        code: the picture, e.g. ``r"\begin{tikzpicture}...\end{tikzpicture}"``.
+        libraries: TikZ libraries to load, e.g. ``("arrows.meta", "calc")``.
+        preamble: extra preamble lines, e.g. ``r"\usepackage{tikz-cd}"``.
+        border: whitespace added around the tight bounding box.
+        timeout: per-subprocess timeout in seconds.
+
+    Raises:
+        TikzError: if a tool is missing from PATH, or LaTeX or dvisvgm fails.
+    """
+    return _compile(code, tuple(libraries), preamble, border, timeout)[0]
 
 
 def tikz(
@@ -110,6 +122,7 @@ def tikz(
     center: bool = True,
     caption: str | None = None,
     alt: str = "TikZ figure",
+    downloads: bool = True,
 ) -> mo.Html:
     r"""Render a TikZ picture as an SVG image.
 
@@ -129,18 +142,20 @@ def tikz(
         center: center the figure in the output area.
         caption: optional caption rendered under the figure.
         alt: alt text for the image.
+        downloads: show buttons for the SVG, the PDF and the TikZ/preamble source.
     """
-    svg = tikz_svg(code, tuple(libraries), preamble, border)
+    svg, pdf = _compile(code, tuple(libraries), preamble, border)
+    display_svg = svg
 
     if scale != 1.0:
-        svg = re.sub(
+        display_svg = re.sub(
             r"(width|height)='([0-9.]+)pt'",
             lambda m: f"{m.group(1)}='{float(m.group(2)) * scale:.6g}pt'",
             svg,
             count=2,
         )
 
-    uri = "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+    uri = "data:image/svg+xml;base64," + base64.b64encode(display_svg.encode()).decode()
     # SVG ink is black; flip it (hue-preserving) when marimo is in dark mode.
     style = (
         {"filter": "invert(1) hue-rotate(180deg)"}
@@ -148,4 +163,23 @@ def tikz(
         else None
     )
     img = mo.image(uri, alt=alt, caption=caption, style=style)
-    return mo.center(img) if center else img
+    if not downloads:
+        return mo.center(img) if center else img
+
+    stem = "tikz-" + hashlib.sha1(svg.encode()).hexdigest()[:8]
+    buttons = mo.hstack(
+        [
+            mo.download(svg.encode(), filename=f"{stem}.svg",
+                        mimetype="image/svg+xml", label="Download SVG"),
+            mo.download(pdf, filename=f"{stem}.pdf",
+                        mimetype="application/pdf", label="Download PDF"),
+            mo.download(code.encode(), filename=f"{stem}.tex",
+                        mimetype="text/plain", label="Download TikZ"),
+            mo.download(preamble.encode(), filename=f"{stem}-preamble.tex",
+                        mimetype="text/plain", label="Download preamble"),
+        ],
+        justify="center" if center else "start",
+        gap=0.4,
+        wrap=True,
+    )
+    return mo.vstack([img, buttons], align="center" if center else "start", gap=0.4)
