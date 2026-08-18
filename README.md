@@ -1,7 +1,7 @@
 # marimo_tikz
 
 TikZ pictures as SVG images in [marimo](https://marimo.io) notebooks.
-Needs `dvilualatex` and `dvisvgm` on `PATH` (Debian/Ubuntu:
+Needs `lualatex` and `dvisvgm` on `PATH` (Debian/Ubuntu:
 `apt install texlive-latex-base texlive-latex-extra texlive-luatex texlive-pictures dvisvgm`).
 
 ```python

@@ -1,6 +1,6 @@
 """Render TikZ pictures as SVG images in marimo notebooks.
 
-Pipeline: LuaTeX -> DVI -> dvisvgm -> SVG, embedded as an ``<img>``.
+Pipeline: LuaTeX -> PDF -> dvisvgm -> SVG, embedded as an ``<img>``.
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ import tempfile
 import marimo as mo
 
 __all__ = ["TikzError", "tikz", "tikz_svg"]
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 _MISSING = {
-    "dvilualatex": "texlive-latex-base texlive-latex-extra texlive-luatex texlive-pictures",
+    "lualatex": "texlive-latex-base texlive-latex-extra texlive-luatex texlive-pictures",
     "dvisvgm": "dvisvgm",
 }
 
@@ -49,11 +49,7 @@ def tikz_svg(
     border: str = "4pt",
     timeout: int = 60,
 ) -> str:
-    r"""Compile a TikZ picture to an SVG string (LuaTeX -> DVI -> dvisvgm).
-
-    DVI rather than PDF is deliberate: the ``dvisvgm`` document-class option makes PGF
-    emit its dvisvgm driver specials, so gradients, clips and transparency map onto
-    native SVG constructs, and ``--exact-bbox`` gives a tight bounding box.
+    r"""Compile a TikZ picture to an SVG string (LuaTeX -> PDF -> dvisvgm).
 
     Results are cached, so re-rendering an unchanged picture is free.
 
@@ -69,7 +65,7 @@ def tikz_svg(
     """
     libs = f"\\usetikzlibrary{{{','.join(libraries)}}}\n" if libraries else ""
     doc = (
-        f"\\documentclass[dvisvgm,border={border}]{{standalone}}\n"
+        f"\\documentclass[border={border}]{{standalone}}\n"
         f"\\usepackage{{tikz}}\n{preamble}\n{libs}"
         f"\\begin{{document}}\n{code}\n\\end{{document}}\n"
     )
@@ -77,17 +73,17 @@ def tikz_svg(
         d = pathlib.Path(tmp)
         (d / "doc.tex").write_text(doc)
         tex = _run(
-            ["dvilualatex", "-interaction=nonstopmode", "-halt-on-error",
+            ["lualatex", "-interaction=nonstopmode", "-halt-on-error",
              "-no-shell-escape", "doc.tex"],
             d, timeout,
         )
-        if tex.returncode != 0 or not (d / "doc.dvi").exists():
+        if tex.returncode != 0 or not (d / "doc.pdf").exists():
             log = (d / "doc.log").read_text(errors="replace")
             hits = "\n".join(ln for ln in log.splitlines() if ln.startswith("!"))
             raise TikzError(hits or log[-1200:])
         conv = _run(
-            ["dvisvgm", "--no-fonts", "--exact-bbox", "--optimize",
-             "-o", "doc.svg", "doc.dvi"],
+            ["dvisvgm", "--pdf", "--no-fonts", "--optimize",
+             "-o", "doc.svg", "doc.pdf"],
             d, timeout,
         )
         if not (d / "doc.svg").exists():

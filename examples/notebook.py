@@ -31,12 +31,8 @@ def _(mo):
 
     `tikz(...)` comes from [marimo_tikz](https://github.com/hessammehr/marimo_tikz),
     declared as a PEP 723 dependency in this notebook's script header. It compiles a
-    TikZ picture with **LuaTeX** into a **DVI**, converts it to **SVG** with `dvisvgm`,
+    TikZ picture with **LuaTeX** into a **PDF**, converts it to **SVG** with `dvisvgm`,
     and embeds it as an `<img>`.
-
-    DVI (not PDF) is deliberate: the `dvisvgm` document-class option makes PGF emit its
-    *dvisvgm driver* specials, so gradients, clips and transparency map onto native SVG
-    constructs, and `--exact-bbox` gives a pixel-tight bounding box.
     """)
     return
 
